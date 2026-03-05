@@ -24,6 +24,7 @@ async def update_inventory(
     return Response(status_code=status.HTTP_201_CREATED)
 
 
+# the rates for the rate-limiter is merely an example here
 @router.get("/query", response_model=InventoryListResponse, status_code=status.HTTP_200_OK,
             dependencies = [Depends(RateLimiter(times=30, seconds=60))])
 async def query_inventory(
