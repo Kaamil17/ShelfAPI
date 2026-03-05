@@ -1,11 +1,13 @@
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi_limiter import FastAPILimiter
 from redis.asyncio import from_url
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from backend.core.config import settings
 from backend.inventory.database import engine
@@ -21,6 +23,7 @@ from backend.inventory.router import router as inventory_router
 async def lifespan(app: FastAPI):
     redis = await from_url(settings.redis_url)
     await FastAPILimiter.init(redis)
+    app.state.redis = redis
     yield
     await engine.dispose()
 
@@ -47,9 +50,26 @@ def create_app() -> FastAPI:
     app.include_router(inventory_router, prefix="/api")
 
     # Health check
-    @app.get("/")
-    async def health_check():
-        return {"message": "Healthy"}
+    @app.get("/health")
+    async def health_check(request: Request):
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            db_status = "ok"
+        except Exception:
+            db_status = "unavailable"
+
+        try:
+            await request.app.state.redis.ping()
+            redis_status = "ok"
+        except Exception:
+            redis_status = "unavailable"
+
+        healthy = db_status == "ok" and redis_status == "ok"
+        return JSONResponse(
+            status_code=200 if healthy else 503,
+            content={"db": db_status, "redis": redis_status},
+        )
 
     return app
 
