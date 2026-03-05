@@ -1,0 +1,54 @@
+version: "3.9"
+services:
+  verkko-api:
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile.local
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8002 --reload
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+    networks:
+       - verkko-backend-tier
+    tty: true
+    depends_on:
+       - db
+       - redis
+    volumes:
+       - ./:/app
+       - ./postgres:/docker-entrypoint-initdb.d
+    env_file:
+       - backend.env
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - verkko-backend-tier
+    volumes:
+      - verkko-db:/var/lib/postgresql/data
+    env_file:
+        - backend.env
+
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - verkko-backend-tier
+    volumes:
+      - verkko-redis:/data
+
+
+volumes:
+  verkko-db:
+    driver: local
+  verkko-redis:
+    driver: local
+
+networks:
+  verkko-backend-tier:
+    driver: bridge
